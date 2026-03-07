@@ -5,6 +5,8 @@ import requests
 import json
 import time
 import os
+from flask import Flask
+import threading
 
 TOKEN = os.getenv("TOKEN")
 
@@ -13,7 +15,23 @@ API_KEY = "luciferr7x"
 SERVER_NAME = "VN"
 
 COOLDOWN_FILE = "cooldown.json"
-LOG_CHANNEL_ID = 1427614982782189568
+LOG_CHANNEL_ID = 1234567890
+
+# ===== WEB SERVER FOR RENDER =====
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running"
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
+
+threading.Thread(target=run_web).start()
+
+# ===== DISCORD BOT =====
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -49,11 +67,11 @@ async def like(interaction: discord.Interaction, uid: str):
     user_id = str(interaction.user.id)
     now = time.time()
 
-    # anti spam 5s
+    # anti spam
     if user_id in spam_control:
         if now - spam_control[user_id] < 5:
             await interaction.response.send_message(
-                "⚠️ Bạn đang dùng quá nhanh. Đợi vài giây.",
+                "⚠️ Bạn đang dùng quá nhanh.",
                 ephemeral=True
             )
             return
@@ -77,23 +95,18 @@ async def like(interaction: discord.Interaction, uid: str):
         )
 
         embed.add_field(name="UID", value=uid)
+
         embed.add_field(
             name="Response",
             value=f"```json\n{json.dumps(data,indent=2)}\n```",
             inline=False
         )
 
-        embed.set_footer(text=f"Used by {interaction.user}")
-
         await interaction.response.send_message(embed=embed)
-
-        log_channel = bot.get_channel(LOG_CHANNEL_ID)
-        if log_channel:
-            await log_channel.send(embed=embed)
 
         return
 
-    # cooldown 24h
+    # cooldown
     if user_id in cooldown:
 
         last = cooldown[user_id]
@@ -101,13 +114,13 @@ async def like(interaction: discord.Interaction, uid: str):
 
         if remain > 0:
 
-            hours = int(remain // 3600)
-            minutes = int((remain % 3600) // 60)
-            seconds = int(remain % 60)
+            h = int(remain // 3600)
+            m = int((remain % 3600) // 60)
+            s = int(remain % 60)
 
             embed = discord.Embed(
                 title="⏳ Cooldown",
-                description=f"Bạn phải đợi **{hours}h {minutes}m {seconds}s** nữa.",
+                description=f"Đợi **{h}h {m}m {s}s** nữa.",
                 color=0xff0000
             )
 
@@ -132,7 +145,7 @@ async def like(interaction: discord.Interaction, uid: str):
             color=0x2ecc71
         )
 
-        embed.add_field(name="UID", value=uid, inline=False)
+        embed.add_field(name="UID", value=uid)
 
         embed.add_field(
             name="Response",
@@ -143,35 +156,6 @@ async def like(interaction: discord.Interaction, uid: str):
         embed.set_footer(text=f"Used by {interaction.user}")
 
         await interaction.response.send_message(embed=embed)
-
-        log_channel = bot.get_channel(LOG_CHANNEL_ID)
-        if log_channel:
-
-            log_embed = discord.Embed(
-                title="📜 Like Command Used",
-                color=0x3498db
-            )
-
-            log_embed.add_field(
-                name="User",
-                value=interaction.user.mention
-            )
-
-            log_embed.add_field(
-                name="UID",
-                value=uid
-            )
-
-            log_embed.add_field(
-                name="Server",
-                value=interaction.guild.name
-            )
-
-            log_embed.set_footer(
-                text=time.strftime("%Y-%m-%d %H:%M:%S")
-            )
-
-            await log_channel.send(embed=log_embed)
 
     except Exception as e:
 
