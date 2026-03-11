@@ -9,7 +9,7 @@ import threading
 
 TOKEN = os.getenv("TOKEN")
 
-API_URL = "https://sikibidilike.onrender.com/like"
+API_URL = "https://nine7yttt67uggdev.onrender.com"
 API_KEY = "luciferr7x"
 SERVER_NAME = "VN"
 
