@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
-import requests
 import asyncio
+import aiohttp
 from flask import Flask
 import threading
 import os
@@ -13,7 +13,6 @@ TOKEN = os.getenv("TOKEN")
 if not TOKEN:
     raise ValueError("❌ Missing TOKEN")
 
-# ===== KEY để thẳng =====
 VISIT_KEY = "skibidiexe"
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.default())
@@ -49,8 +48,8 @@ EMOTES_S7 = [
 API_URL = "https://tui-3yue7eisiskksjs.onrender.com/join"
 VISIT_API = "https://cosmos-visit-api.vercel.app/visit"
 
-# ===== CALL JOIN =====
-def call_api(tc, group, emote):
+# ===== CALL API (ASYNC + SAFE) =====
+async def call_api(session, tc, group, emote):
     params = {
         "tc": tc,
         "uid1": group[0] if len(group) > 0 else "",
@@ -63,9 +62,19 @@ def call_api(tc, group, emote):
     }
 
     try:
-        requests.get(API_URL, params=params, timeout=10)
-    except:
-        pass
+        async with session.get(API_URL, params=params, timeout=15) as r:
+            text = await r.text()
+
+            # debug nhẹ
+            if "cloudflare" in text.lower():
+                print("⚠️ Bị Cloudflare block!")
+
+            return text
+
+    except asyncio.TimeoutError:
+        print("⏱ Timeout")
+    except Exception as e:
+        print("❌ API lỗi:", e)
 
 # ===== AUTO =====
 async def run_auto(ctx, tc, uids, emotes):
@@ -76,11 +85,16 @@ async def run_auto(ctx, tc, uids, emotes):
 
     groups = [uids[i:i+5] for i in range(0, len(uids), 5)]
 
-    for emote in emotes:
-        for group in groups:
-            call_api(tc, group, emote)
+    async with aiohttp.ClientSession() as session:
+        for emote in emotes:
+            for group in groups:
+                await call_api(session, tc, group, emote)
 
-        await asyncio.sleep(8)
+                # 🔥 delay chống block
+                await asyncio.sleep(2)
+
+            # nghỉ giữa mỗi emote
+            await asyncio.sleep(5)
 
     await ctx.send("✅ Done!")
 
@@ -115,28 +129,29 @@ async def visit(ctx, region, uid):
         return
 
     params = {
-        "api_key": VISIT_KEY,  # 🔑 key nằm đây
+        "api_key": VISIT_KEY,
         "region": region,
         "uid": uid
     }
 
-    try:
-        r = requests.get(VISIT_API, params=params, timeout=40)
-        data = r.json()
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(VISIT_API, params=params, timeout=40) as r:
+                data = await r.json()
 
-        formatted = json.dumps(data, indent=2, ensure_ascii=False)
+                formatted = json.dumps(data, indent=2, ensure_ascii=False)
 
-        if len(formatted) > 1900:
-            await ctx.send("📄 JSON quá dài, xem log Render!")
-            print(formatted)
-        else:
-            await ctx.send(f"```json\n{formatted}\n```")
+                if len(formatted) > 1900:
+                    await ctx.send("📄 JSON dài, xem log!")
+                    print(formatted)
+                else:
+                    await ctx.send(f"```json\n{formatted}\n```")
 
-    except requests.exceptions.Timeout:
-        await ctx.send("⏱ Timeout 40s!")
-    except Exception as e:
-        await ctx.send("❌ API lỗi!")
-        print(e)
+        except asyncio.TimeoutError:
+            await ctx.send("⏱ Timeout 40s!")
+        except Exception as e:
+            await ctx.send("❌ API lỗi!")
+            print(e)
 
 # ===== START =====
 keep_alive()
